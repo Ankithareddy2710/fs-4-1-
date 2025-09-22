@@ -1,0 +1,607 @@
+/*
+1.Write a query to find the top 5 products by global on-hand quantity
+
+Database: inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+  
+  
+Output
+------
+
++------------+--------+---------+                                                                                       
+| product_id | sku    | on_hand |                                                                                       
++------------+--------+---------+                                                                                       
+|          5 | HD-005 |     630 |                                                                                       
+|          8 | RM-008 |     365 |                                                                                       
+|          1 | KB-001 |     360 |                                                                                       
+|          2 | MS-002 |     360 |                                                                                       
+|          6 | SD-006 |     255 |                                                                                       
++------------+--------+---------+
+  
+*/
+
+use inv_mgmt;
+select p.product_id,p.sku,sum(s.qty) as on_hand from products p
+join stock_movements s
+on p.product_id=s.product_id
+group by p.product_id
+order by on_hand desc,p.product_id asc
+limit 5;
+
+
+/*
+
+2.Find the warehouses whose inventory value > overall average warehouse inventory value
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+
+Output:
+-------
++--------------+------------+-----------+
+| warehouse_id | name       | inv_value |
++--------------+------------+-----------+
+|            1 | Central DC | 163990.00 |
++--------------+------------+-----------+
+
+*/
+
+
+/*
+
+WAQ to find the warehouses with at least 3 distinct categories stored
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+  
+  
+Output:
+=======
++--------------+------------+------+
+| warehouse_id | name       | cats |
++--------------+------------+------+
+|            1 | Central DC |    5 |
+|            2 | North Hub  |    4 |
+|            3 | South Hub  |    4 |
+|            4 | West Hub   |    4 |
++--------------+------------+------+
+
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to find the warehouses that hold more than 40% of a product’s global stock (dominant holder)
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+  
+Sample output:
+==============
+
++--------------+------------+--------+--------+-----------+
+| warehouse_id | name       | sku    | wh_qty | total_qty |
++--------------+------------+--------+--------+-----------+
+|            1 | Central DC | KB-001 |    160 |       360 |
+|            1 | Central DC | MS-002 |    240 |       360 |
+|            1 | Central DC | MN-003 |     50 |        77 |
+|            1 | Central DC | MN-004 |     20 |        43 |
+|            1 | Central DC | HD-005 |    390 |       630 |
+|            1 | Central DC | SD-007 |     50 |        90 |
+|            1 | Central DC | RM-008 |    285 |       365 |
+|            1 | Central DC | GC-010 |     18 |        36 |
+|            1 | Central DC | NB-012 |      8 |        18 |
+|            2 | North Hub  | SD-006 |    130 |       255 |
+|            2 | North Hub  | CP-011 |     32 |        57 |
+|            3 | South Hub  | MN-004 |     23 |        43 |
+|            3 | South Hub  | SD-006 |    125 |       255 |
+|            3 | South Hub  | RM-009 |     80 |        80 |
+|            3 | South Hub  | CP-011 |     25 |        57 |
+|            4 | West Hub   | SD-007 |     40 |        90 |
+|            4 | West Hub   | GC-010 |     18 |        36 |
+|            4 | West Hub   | NB-012 |     10 |        18 |
++--------------+------------+--------+--------+-----------+
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to find the Category-level “low stock” report: categories whose aggregate on-hand < 500
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+
+
+Output:
+==============
+
++----------+---------+
+| category | on_hand |
++----------+---------+
+| Displays |     120 |
+| Systems  |      18 |
++----------+---------+
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to find the products that never had an ADJUST movement
+
+Output:
+=======
+
++------------+--------+---------------------+-------------+------------+---------------+--------------+
+| product_id | sku    | name                | category    | unit_price | reorder_point | discontinued |
++------------+--------+---------------------+-------------+------------+---------------+--------------+
+|          1 | KB-001 | Mechanical Keyboard | Peripherals |      79.99 |            30 |            0 |
+|          2 | MS-002 | Wireless Mouse      | Peripherals |      24.50 |            40 |            0 |
+|          4 | MN-004 | 34in Ultrawide      | Displays    |     499.00 |            10 |            0 |
+|          7 | SD-007 | 2TB SSD             | Storage     |     179.00 |            15 |            0 |
+|          9 | RM-009 | 32GB DDR5           | Components  |      89.00 |            30 |            0 |
+|         10 | GC-010 | Mid-range GPU       | Components  |     349.00 |             8 |            0 |
+|         11 | CP-011 | 8-core CPU          | Components  |     259.00 |            12 |            0 |
+|         12 | NB-012 | 15in Laptop         | Systems     |     899.00 |             5 |            0 |
++------------+--------+---------------------+-------------+------------+---------------+--------------+
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to find the products whose category price is above that category’s average (per-category)
+
+Output:
+=======
+
++------------+--------+---------------------+-------------+------------+---------------+--------------+
+| product_id | sku    | name                | category    | unit_price | reorder_point | discontinued |
++------------+--------+---------------------+-------------+------------+---------------+--------------+
+|          1 | KB-001 | Mechanical Keyboard | Peripherals |      79.99 |            30 |            0 |
+|          4 | MN-004 | 34in Ultrawide      | Displays    |     499.00 |            10 |            0 |
+|          7 | SD-007 | 2TB SSD             | Storage     |     179.00 |            15 |            0 |
+|         10 | GC-010 | Mid-range GPU       | Components  |     349.00 |             8 |            0 |
+|         11 | CP-011 | 8-core CPU          | Components  |     259.00 |            12 |            0 |
++------------+--------+---------------------+-------------+------------+---------------+--------------+
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to pick warehouses where no other warehouse has strictly greater on-hand 
+for that product
+
+Output:
+=======
++------------+--------+--------------+------------+
+| product_id | sku    | warehouse_id | name       |
++------------+--------+--------------+------------+
+|         10 | GC-010 |            1 | Central DC |
+|          5 | HD-005 |            1 | Central DC |
+|          1 | KB-001 |            1 | Central DC |
+|          3 | MN-003 |            1 | Central DC |
+|          2 | MS-002 |            1 | Central DC |
+|          8 | RM-008 |            1 | Central DC |
+|          7 | SD-007 |            1 | Central DC |
+|         11 | CP-011 |            2 | North Hub  |
+|          6 | SD-006 |            2 | North Hub  |
+|          4 | MN-004 |            3 | South Hub  |
+|          9 | RM-009 |            3 | South Hub  |
+|         10 | GC-010 |            4 | West Hub   |
+|         12 | NB-012 |            4 | West Hub   |
++------------+--------+--------------+------------+
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to find the warehouses that stock every product in a given category
+
+Output:
+=======
++--------------+------------+
+| warehouse_id | name       |
++--------------+------------+
+|            1 | Central DC |
++--------------+------------+
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+*/
+
+use inv_mgmt;
+
+
+/*
+
+WAQ to find the products with last movement older than any movement of their 
+category peers
+
+Output:
+=======
++------------+--------+
+| product_id | sku    |
++------------+--------+
+|          2 | MS-002 |
+|          4 | MN-004 |
+|          5 | HD-005 |
+|          9 | RM-009 |
+|         12 | NB-012 |
++------------+--------+
+
+
+
+Database:  inv_mgmt
+
+products:
+=========
+  product_id   INT PRIMARY KEY AUTO_INCREMENT,
+  sku          VARCHAR(32) NOT NULL UNIQUE,
+  name         VARCHAR(128) NOT NULL,
+  category     VARCHAR(64)  NOT NULL,
+  unit_price   DECIMAL(10,2) NOT NULL,
+  reorder_point INT NOT NULL DEFAULT 0,
+  discontinued TINYINT(1) NOT NULL DEFAULT 0
+
+
+warehouses
+===========
+  warehouse_id INT PRIMARY KEY AUTO_INCREMENT,
+  name         VARCHAR(64) NOT NULL,
+  city         VARCHAR(64) NOT NULL,
+  state        VARCHAR(64) NOT NULL,
+  capacity     INT NOT NULL  -- conceptual: max on-hand units
+
+
+stock_movements
+================
+  movement_id   BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id    INT NOT NULL,
+  warehouse_id  INT NOT NULL,
+  movement_date DATE NOT NULL,
+  movement_type ENUM('IN','OUT','ADJUST') NOT NULL,
+  qty           INT NOT NULL,      -- positive for IN/ADJUST(add), negative for OUT/ADJUST(remove)
+  unit_cost     DECIMAL(10,2) NULL,
+  reference     VARCHAR(64) NULL,
+  CONSTRAINT fk_sm_prod FOREIGN KEY (product_id) REFERENCES products(product_id),
+  CONSTRAINT fk_sm_wh   FOREIGN KEY (warehouse_id) REFERENCES warehouses(warehouse_id),
+  INDEX ix_sm_prod_wh_date (product_id, warehouse_id, movement_date),
+  INDEX ix_sm_date (movement_date)
+  
+*/
+
+use inv_mgmt;
